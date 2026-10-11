@@ -1,0 +1,90 @@
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { PrismaClient } = require("@prisma/client");
+
+const prisma = new PrismaClient();
+const router = express.Router();
+
+router.post("/register", async (req, res) => {
+  try {
+    const { name, email, password, wallet } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "البيانات غير مكتملة" });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: "هذا البريد مستخدم بالفعل" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        wallet: wallet || "",
+        balance: 0,
+      },
+    });
+
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    return res.status(201).json({
+      message: "تم إنشاء الحساب بنجاح",
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        wallet: user.wallet,
+        balance: user.balance,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "حدث خطأ في الخادم" });
+  }
+});
+
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ message: "المستخدم غير موجود" });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: "كلمة المرور غير صحيحة" });
+    }
+
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    return res.status(200).json({
+      message: "تم تسجيل الدخول بنجاح",
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        wallet: user.wallet,
+        balance: user.balance,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "حدث خطأ في الخادم" });
+  }
+});
+
+module.exports = router;
