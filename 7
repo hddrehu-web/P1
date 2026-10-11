@@ -1,0 +1,57 @@
+const express = require("express");
+const { PrismaClient } = require("@prisma/client");
+
+const prisma = new PrismaClient();
+const router = express.Router();
+
+router.get("/balance/:userId", async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: Number(req.params.userId) },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "المستخدم غير موجود" });
+    }
+
+    return res.status(200).json({ balance: user.balance, wallet: user.wallet });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "حدث خطأ في الخادم" });
+  }
+});
+
+router.post("/deposit", async (req, res) => {
+  try {
+    const { userId, amount } = req.body;
+
+    if (!userId || !amount) {
+      return res.status(400).json({ message: "المبلغ أو المستخدم غير صحيح" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: Number(userId) },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "المستخدم غير موجود" });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: Number(userId) },
+      data: {
+        balance: user.balance + Number(amount),
+      },
+    });
+
+    return res.status(200).json({
+      message: "تم شحن الحساب بنجاح",
+      balance: updatedUser.balance,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "حدث خطأ في الخادم" });
+  }
+});
+
+module.exports = router;
